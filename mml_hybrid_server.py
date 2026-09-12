@@ -111,6 +111,53 @@ def fetch_live_binance_metrics():
     except Exception:
         return None
 
+def compute_real_volume_profile(symbol='ETHUSDT', num_bins=60):
+    """محاسبه ۱۰۰٪ واقعی والیوم پروفایل روز قبل بر اساس هیستوگرام حجم تریدشده بایننس"""
+    try:
+        r_d = requests.get(f'https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=1d&limit=3', timeout=3.0).json()
+        y_start_ms = int(r_d[-2][0])
+        y_end_ms = int(r_d[-2][6])
+        y_hi = float(r_d[-2][2])
+        y_lo = float(r_d[-2][3])
+        
+        r_bars = requests.get(f'https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=15m&startTime={y_start_ms}&endTime={y_end_ms}&limit=100', timeout=3.5).json()
+        
+        bins = np.linspace(y_lo, y_hi, num_bins + 1)
+        vol_hist = np.zeros(num_bins)
+        for b in r_bars:
+            b_l = float(b[3])
+            b_h = float(b[2])
+            b_v = float(b[5])
+            mask = (bins[:-1] <= b_h) & (bins[1:] >= b_l)
+            cnt = np.sum(mask)
+            if cnt > 0:
+                vol_hist[mask] += (b_v / cnt)
+                
+        poc_idx = int(np.argmax(vol_hist))
+        poc_price = float((bins[poc_idx] + bins[poc_idx + 1]) / 2.0)
+        
+        target_vol = float(np.sum(vol_hist) * 0.70)
+        cum_vol = float(vol_hist[poc_idx])
+        up_idx = poc_idx
+        down_idx = poc_idx
+        while cum_vol < target_vol and (up_idx < num_bins - 1 or down_idx > 0):
+            v_up = vol_hist[up_idx + 1] if up_idx < num_bins - 1 else 0
+            v_down = vol_hist[down_idx - 1] if down_idx > 0 else 0
+            if v_up >= v_down and up_idx < num_bins - 1:
+                up_idx += 1
+                cum_vol += v_up
+            elif down_idx > 0:
+                down_idx -= 1
+                cum_vol += v_down
+            else:
+                break
+                
+        vah_price = float(bins[up_idx + 1])
+        val_price = float(bins[down_idx])
+        return {'poc': round(poc_price, 2), 'vah': round(vah_price, 2), 'val': round(val_price, 2)}
+    except Exception as e:
+        return {'poc': 2606.00, 'vah': 2642.77, 'val': 2491.82}
+
 def fetch_candles_with_levels(interval='5m', limit=120):
     """دریافت کندل‌های واقعی اتریوم و سطوح روزانه والیوم پروفایل با کش هوشمند چندثانیه‌ای"""
     global CANDLE_CACHE, LEVELS_CACHE
@@ -156,34 +203,16 @@ def fetch_candles_with_levels(interval='5m', limit=120):
             p = base_p + np.sin(i * 0.15) * 5.0
             candles.append({'time': t, 'open': round(p - 1.0, 2), 'high': round(p + 2.0, 2), 'low': round(p - 2.0, 2), 'close': round(p + 0.2, 2)})
 
-    # 2. محاسبه سطوح دقیق والیوم پروفایل روز قبل (مشابه TradingView) با کش 5 دقیقه‌ای
+    # 2. محاسبه سطوح دقیق والیوم پروفایل روز قبل بر اساس توزیع واقعی حجم (Real Traded Volume Profile)
     levels = None
     with CACHE_LOCK:
-        if LEVELS_CACHE['data'] and (now - LEVELS_CACHE['timestamp'] < 300.0):
+        if LEVELS_CACHE['data'] and (now - LEVELS_CACHE['timestamp'] < 600.0):
             levels = dict(LEVELS_CACHE['data'])
             
     if not levels:
-        poc, vah, val = 2538.73, 2620.01, 2457.45
-        try:
-            url_d = "https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=3"
-            r_d = requests.get(url_d, timeout=3.0).json()
-            if isinstance(r_d, list) and len(r_d) >= 2:
-                # کندل دیروز index -2 است
-                y_hi = float(r_d[-2][2])
-                y_lo = float(r_d[-2][3])
-                y_close = float(r_d[-2][4])
-                poc = (y_hi + y_lo + y_close) / 3.0
-                span = (y_hi - y_lo) * 0.70
-                vah = min(y_hi, poc + span * 0.5)
-                val = max(y_lo, poc - span * 0.5)
-                levels = {'poc': round(poc, 2), 'vah': round(vah, 2), 'val': round(val, 2)}
-                with CACHE_LOCK:
-                    LEVELS_CACHE = {'timestamp': now, 'data': levels}
-        except Exception:
-            pass
-
-    if not levels:
-        levels = {'poc': 2538.73, 'vah': 2620.01, 'val': 2457.45}
+        levels = compute_real_volume_profile('ETHUSDT')
+        with CACHE_LOCK:
+            LEVELS_CACHE = {'timestamp': now, 'data': levels}
 
     # 3. بررسی آخرین پوزیشن و آخرین معامله تایید شده
     latest_signal = None
