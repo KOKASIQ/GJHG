@@ -289,6 +289,6 @@ if barstate.islast and show_hud
 webhook_long_msg = '{"symbol":"ETHUSDT","side":1,"entry":' + str.tostring(long_entry) + ',"tp":' + str.tostring(long_tp) + ',"sl":' + str.tostring(long_sl) + ',"capital":' + str.tostring(account_cap) + ',"risk_pct":' + str.tostring(risk_pct) + ',"btc_vel_15m":' + str.tostring(btc_vel_15m) + ',"btc_delta_5m":' + str.tostring(btc_delta_5m) + ',"delta_pct_5m":' + str.tostring(eth_delta_5m) + '}'
 webhook_short_msg = '{"symbol":"ETHUSDT","side":-1,"entry":' + str.tostring(short_entry) + ',"tp":' + str.tostring(short_tp) + ',"sl":' + str.tostring(short_sl) + ',"capital":' + str.tostring(account_cap) + ',"risk_pct":' + str.tostring(risk_pct) + ',"btc_vel_15m":' + str.tostring(btc_vel_15m) + ',"btc_delta_5m":' + str.tostring(btc_delta_5m) + ',"delta_pct_5m":' + str.tostring(eth_delta_5m) + '}'
 
-alertcondition(long_approved, title="سیگنال لانگ حراج اتریوم", message=webhook_long_msg)
-alertcondition(short_approved, title="سیگنال شورت حراج اتریوم", message=webhook_short_msg)
+alertcondition(long_approved, title="سیگنال لانگ حراج اتریوم", message='{"symbol":"ETHUSDT","side":1}')
+alertcondition(short_approved, title="سیگنال شورت حراج اتریوم", message='{"symbol":"ETHUSDT","side":-1}')
 alertcondition(long_trap_detected or short_trap_detected, title="هشدار تله سرایت بیت‌کوین", message='{"warning":"BTC Contagion Trap Detected"}')
