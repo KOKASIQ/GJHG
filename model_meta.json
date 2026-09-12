@@ -1,0 +1,24 @@
+{
+  "features": [
+    "side",
+    "delta_pct_5m",
+    "delta_pct_15m",
+    "taker_ratio_5m",
+    "rsi_14",
+    "atr_pct",
+    "velocity_15m",
+    "poc_dist_pct",
+    "va_width_pct",
+    "open_loc",
+    "hour_utc",
+    "is_balance",
+    "btc_delta_5m",
+    "btc_vel_15m",
+    "rel_strength_15m"
+  ],
+  "threshold": 0.45,
+  "risk_pct": 3.0,
+  "default_capital": 1000.0,
+  "total_samples": 82,
+  "win_rate_raw": 39.02439024390244
+}

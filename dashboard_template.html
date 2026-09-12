@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>MML AI Sentinel - داشبورد زنده وب‌هوک و هوش مصنوعی</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+        body { background: #0e1117; color: #e1e8ed; margin: 0; padding: 20px; direction: rtl; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .header h1 { margin: 0; font-size: 22px; color: #58a6ff; display: flex; align-items: center; gap: 10px; }
+        .pulse { display: inline-block; width: 12px; height: 12px; background: #2ea043; border-radius: 50%; box-shadow: 0 0 10px #2ea043; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: #161b22; padding: 18px; border-radius: 8px; border: 1px solid #30363d; }
+        .card .title { font-size: 13px; color: #8b949e; margin-bottom: 8px; }
+        .card .value { font-size: 22px; font-weight: bold; color: #f0f6fc; }
+        .card .sub { font-size: 12px; color: #58a6ff; margin-top: 5px; }
+        .panel { background: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; margin-bottom: 20px; }
+        .btn { padding: 10px 18px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; margin-left: 10px; }
+        .btn-green { background: #238636; color: white; }
+        .btn-green:hover { background: #2ea043; }
+        .btn-orange { background: #d29922; color: white; }
+        .btn-orange:hover { background: #bb8009; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
+        th { background: #21262d; color: #8b949e; padding: 12px 10px; text-align: right; border-bottom: 2px solid #30363d; }
+        .endpoint-box { background: #0d1117; padding: 12px 16px; border-radius: 6px; border: 1px dashed #388bfd; font-family: monospace; font-size: 14px; color: #79c0ff; display: inline-block; margin-top: 10px; direction: ltr; }
+        #test-res { margin-top: 15px; padding: 15px; border-radius: 6px; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1><span class="pulse"></span> موتور هوش مصنوعی MML AI Sentinel</h1>
+                <div style="font-size: 13px; color: #8b949e; margin-top: 6px;">سرور وب‌هوک فعال و متصل به مدل یادگیری ماشین LightGBM</div>
+            </div>
+            <div>
+                <span style="background: #238636; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;">آماده‌به‌کار (ONLINE)</span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <div class="title">سرمایه اولیه فعال</div>
+                <div class="value">${CAPITAL}</div>
+                <div class="sub">پوزیشن سایزینگ ۳٪ فعال</div>
+            </div>
+            <div class="card">
+                <div class="title">سقف ریسک مجاز در هر معامله</div>
+                <div class="value">{RISK_PCT}% (${RISK_USD})</div>
+                <div class="sub">Fixed Fractional Risk</div>
+            </div>
+            <div class="card">
+                <div class="title">آستانه تایید هوش مصنوعی (ML Gate)</div>
+                <div class="value">{THRESHOLD}%</div>
+                <div class="sub">LightGBM Meta-Labeling (15 ویژگی)</div>
+            </div>
+            <div class="card">
+                <div class="title">دیده‌بان بیت‌کوین (BTC Watchdog)</div>
+                <div class="value" style="color: #2ea043;">فعال (Active)</div>
+                <div class="sub">آستانه تله: -0.15% در ۱۵ دقیقه</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3 style="margin-top: 0; color: #f0f6fc;">آدرس وب‌هوک برای اتصال تریدینگ‌ویو (TradingView Webhook URL):</h3>
+            <div class="endpoint-box">POST http://localhost:8000/webhook</div>
+            <p style="color: #8b949e; font-size: 13px; line-height: 1.6; margin-top: 10px;">
+                این آدرس مقصد دریافت سیگنال‌های وب‌هوک تریدینگ‌ویو است. با باز کردن این صفحه در مرورگر (متد GET)، داشبورد بالا مشاهده می‌شود و با ارسال سیگنال از تریدینگ‌ویو (متد POST)، مدل بلافاصله تصمیم‌گیری می‌کند.
+            </p>
+            
+            <div style="margin-top: 20px; border-top: 1px solid #30363d; padding-top: 15px;">
+                <h4 style="margin: 0 0 10px 0; color: #f0f6fc;">شبیه‌سازی زنده ستاپ‌های معاملاتی (تست آنی):</h4>
+                <button class="btn btn-green" onclick="sendTest(1, 0.25)">🚀 تست ستاپ لانگ با تایید بیت‌کوین</button>
+                <button class="btn btn-orange" onclick="sendTest(1, -0.40)">⚠️ تست تله دامپ بیت‌کوین (دفع تله)</button>
+                <div id="test-res"></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3 style="margin-top: 0; color: #f0f6fc;">تاریخچه معاملات و تصمیمات زنده هوش مصنوعی:</h3>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>زمان ثبت (UTC)</th>
+                            <th>جهت</th>
+                            <th>قیمت ورود</th>
+                            <th>حد سود (TP)</th>
+                            <th>حد ضرر (SL)</th>
+                            <th>احتمال هوش مصنوعی</th>
+                            <th>شتاب بیت‌کوین</th>
+                            <th>تصمیم نهایی</th>
+                            <th>سایزینگ ۳٪ (اهرم)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {SIGNALS_ROWS}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function sendTest(side, btc_vel) {
+            const resDiv = document.getElementById('test-res');
+            resDiv.style.display = 'block';
+            resDiv.style.background = '#21262d';
+            resDiv.style.color = '#fff';
+            resDiv.innerHTML = 'در حال ارسال به موتور هوش مصنوعی و پردازش مدل...';
+
+            const payload = {
+                symbol: "ETHUSDT",
+                side: side,
+                entry: 2435.0,
+                tp: 2467.0,
+                sl: 2413.67,
+                capital: 1000.0,
+                risk_pct: 3.0,
+                btc_vel_15m: btc_vel,
+                btc_delta_5m: btc_vel > 0 ? 0.18 : -0.22,
+                delta_pct_5m: 0.20,
+                taker_ratio_5m: 0.64,
+                rsi_14: 35.0,
+                atr_pct: 0.24,
+                velocity_15m: 0.05
+            };
+
+            fetch('/webhook', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.approved) {
+                    resDiv.style.background = 'rgba(35, 134, 54, 0.2)';
+                    resDiv.style.border = '1px solid #2ea043';
+                    resDiv.innerHTML = '<b>نتیجه:</b> ' + data.decision + ' | احتمال: ' + (data.ml_probability*100).toFixed(1) + '% | حجم پوزیشن: $' + data.position_sizing.position_usd + ' (' + data.position_sizing.recommended_leverage + 'x)<br><small>برای مشاهده ردیف جدید در جدول، صفحه را رفرش کنید.</small>';
+                } else {
+                    resDiv.style.background = 'rgba(210, 153, 34, 0.2)';
+                    resDiv.style.border = '1px solid #d29922';
+                    resDiv.innerHTML = '<b>نتیجه:</b> ' + data.decision + ' | احتمال: ' + (data.ml_probability*100).toFixed(1) + '% | وضعیت بیت‌کوین: تله ریزش شناسایی و ورود مسدود شد!<br><small>برای مشاهده ردیف جدید در جدول، صفحه را رفرش کنید.</small>';
+                }
+            })
+            .catch(err => {
+                resDiv.style.background = 'rgba(218, 54, 51, 0.2)';
+                resDiv.style.border = '1px solid #da3633';
+                resDiv.innerHTML = 'خطا در ارتباط با سرور: ' + err;
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: mml-ai-sentinel
+    runtime: docker
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: PORT
+        value: 8000
