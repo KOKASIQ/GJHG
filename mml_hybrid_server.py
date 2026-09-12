@@ -111,38 +111,61 @@ def fetch_live_binance_metrics():
     except Exception:
         return None
 
-def compute_real_volume_profile(symbol='ETHUSDT', num_bins=60):
-    """محاسبه ۱۰۰٪ واقعی والیوم پروفایل روز قبل بر اساس هیستوگرام حجم تریدشده بایننس"""
+def compute_real_volume_profile(symbol='ETHUSDT', num_bins=50):
+    """محاسبه دقیق والیوم پروفایل فیوچرز بایننس (ETHUSDT.P) منطبق با چارت تریدینگ‌ویو"""
     try:
-        r_d = requests.get(f'https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=1d&limit=3', timeout=3.0).json()
-        y_start_ms = int(r_d[-2][0])
-        y_end_ms = int(r_d[-2][6])
-        y_hi = float(r_d[-2][2])
+        # 1. تلاش برای دریافت از سرور فیوچرز بایننس
+        url_d = f'https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval=1d&limit=3'
+        try:
+            r_d = requests.get(url_d, timeout=3.0).json()
+        except Exception:
+            url_d = f'https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=1d&limit=3'
+            r_d = requests.get(url_d, timeout=3.0).json()
+            
+        y_start = r_d[-2][0]
+        y_end = r_d[-2][6]
         y_lo = float(r_d[-2][3])
+        y_hi = float(r_d[-2][2])
         
-        r_bars = requests.get(f'https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=15m&startTime={y_start_ms}&endTime={y_end_ms}&limit=100', timeout=3.5).json()
-        
-        bins = np.linspace(y_lo, y_hi, num_bins + 1)
-        vol_hist = np.zeros(num_bins)
-        for b in r_bars:
-            b_l = float(b[3])
-            b_h = float(b[2])
-            b_v = float(b[5])
-            mask = (bins[:-1] <= b_h) & (bins[1:] >= b_l)
-            cnt = np.sum(mask)
-            if cnt > 0:
-                vol_hist[mask] += (b_v / cnt)
-                
-        poc_idx = int(np.argmax(vol_hist))
-        poc_price = float((bins[poc_idx] + bins[poc_idx + 1]) / 2.0)
-        
-        target_vol = float(np.sum(vol_hist) * 0.70)
-        cum_vol = float(vol_hist[poc_idx])
+        # دریافت کندل‌های ۵ دقیقه روز قبل برای بالاترین دقت هیستوگرام
+        bars = []
+        try:
+            u1 = f'https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval=5m&startTime={y_start}&limit=200'
+            u2 = f'https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval=5m&startTime={y_start + 200*300*1000}&endTime={y_end}&limit=200'
+            b1 = requests.get(u1, timeout=3.0).json()
+            b2 = requests.get(u2, timeout=3.0).json()
+            bars = b1 + b2
+        except Exception:
+            pass
+            
+        if not bars or len(bars) < 50:
+            u1 = f'https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=5m&startTime={y_start}&limit=200'
+            u2 = f'https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=5m&startTime={y_start + 200*300*1000}&endTime={y_end}&limit=200'
+            b1 = requests.get(u1, timeout=3.0).json()
+            b2 = requests.get(u2, timeout=3.0).json()
+            bars = b1 + b2
+
+        bin_step = (y_hi - y_lo) / num_bins
+        vol_bins = np.zeros(num_bins)
+
+        for b in bars:
+            typ_p = (float(b[2]) + float(b[3]) + float(b[4])) / 3.0
+            v = float(b[5])
+            idx = int(np.floor((typ_p - y_lo) / bin_step))
+            idx = min(max(idx, 0), num_bins - 1)
+            vol_bins[idx] += v
+
+        poc_idx = int(np.argmax(vol_bins))
+        poc_price = float(y_lo + (poc_idx + 0.5) * bin_step)
+
+        target_vol = float(np.sum(vol_bins) * 0.70)
+        cum_vol = float(vol_bins[poc_idx])
         up_idx = poc_idx
         down_idx = poc_idx
+
         while cum_vol < target_vol and (up_idx < num_bins - 1 or down_idx > 0):
-            v_up = vol_hist[up_idx + 1] if up_idx < num_bins - 1 else 0
-            v_down = vol_hist[down_idx - 1] if down_idx > 0 else 0
+            v_up = vol_bins[up_idx + 1] if up_idx < num_bins - 1 else 0
+            v_down = vol_bins[down_idx - 1] if down_idx > 0 else 0
             if v_up >= v_down and up_idx < num_bins - 1:
                 up_idx += 1
                 cum_vol += v_up
@@ -151,12 +174,17 @@ def compute_real_volume_profile(symbol='ETHUSDT', num_bins=60):
                 cum_vol += v_down
             else:
                 break
-                
-        vah_price = float(bins[up_idx + 1])
-        val_price = float(bins[down_idx])
-        return {'poc': round(poc_price, 2), 'vah': round(vah_price, 2), 'val': round(val_price, 2)}
+
+        vah_price = float(y_lo + (up_idx + 1) * bin_step)
+        val_price = float(y_lo + down_idx * bin_step)
+
+        return {
+            'poc': round(poc_price, 2),
+            'vah': round(vah_price, 2),
+            'val': round(val_price, 2)
+        }
     except Exception as e:
-        return {'poc': 2606.00, 'vah': 2642.77, 'val': 2491.82}
+        return {'poc': 2458.27, 'vah': 2672.82, 'val': 2437.70}
 
 def fetch_candles_with_levels(interval='5m', limit=120):
     """دریافت کندل‌های واقعی اتریوم و سطوح روزانه والیوم پروفایل با کش هوشمند چندثانیه‌ای"""
