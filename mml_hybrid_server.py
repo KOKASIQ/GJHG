@@ -109,11 +109,17 @@ def check_orderbook_absorption(symbol='ETHUSDT', side=1, entry_price=None):
         if side == 1:
             ratio = bid_vol / (ask_vol + 1e-6)
             is_absorbed = ratio >= 1.5
-            reason = f"دیوار خرید Bids: {bid_vol:.1f} ETH در برابر Asks: {ask_vol:.1f} ETH (نسبت: {ratio:.2f}x)"
+            if is_absorbed:
+                reason = f"حمایت خریداران پسیو (Bids: {bid_vol:.1f} ETH vs Asks: {ask_vol:.1f} ETH | ضریب عدم‌تعادل: {ratio:.2f}x)"
+            else:
+                reason = f"عدم حمایت کافی در بوک (Bids: {bid_vol:.1f} ETH vs Asks: {ask_vol:.1f} ETH | نسبت: {ratio:.2f}x < 1.5)"
         else:
             ratio = ask_vol / (bid_vol + 1e-6)
             is_absorbed = ratio >= 1.5
-            reason = f"دیوار فروش Asks: {ask_vol:.1f} ETH در برابر Bids: {bid_vol:.1f} ETH (نسبت: {ratio:.2f}x)"
+            if is_absorbed:
+                reason = f"فشار فروشندگان پسیو (Asks: {ask_vol:.1f} ETH vs Bids: {bid_vol:.1f} ETH | ضریب عدم‌تعادل: {ratio:.2f}x)"
+            else:
+                reason = f"دیوار خرید مانع ریزش است (Bids: {bid_vol:.1f} ETH vs Asks: {ask_vol:.1f} ETH | نسبت فروش/خرید: {ratio:.2f}x < 1.5)"
             
         return {
             'approved': is_absorbed,
@@ -484,10 +490,18 @@ def render_dashboard():
     
     signals_rows = ""
     for s in reversed(signals[-15:]):
-        status_badge = '<span style="background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;">تأیید شد (Approved)</span>' if s.get('approved') else (
-            '<span style="background: #f39c12; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;">⚠️ تله بیت‌کوین (Trap Blocked)</span>' if s.get('is_trap') else
-            '<span style="background: #c0392b; color: white; padding: 4px 8px; border-radius: 4px;">رد شد (Rejected)</span>'
-        )
+        r_reason = s.get('reject_reason', '')
+        if s.get('approved'):
+            status_badge = '<span style="background: #27ae60; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;">تأیید شد (Approved)</span>'
+        elif s.get('is_trap'):
+            status_badge = f'<span style="background: #f39c12; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;" title="{r_reason}">⚠️ تله بیت‌کوین (Trap)</span>'
+        elif s.get('is_absorbed') is False:
+            if s.get('side') == 'SHORT':
+                status_badge = f'<span style="background: #8e44ad; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;" title="{r_reason}">🛡️ دفع دیوار خرید</span>'
+            else:
+                status_badge = f'<span style="background: #e67e22; color: white; padding: 4px 8px; border-radius: 4px; font-weight: bold;" title="{r_reason}">❌ ضعف اردربوک</span>'
+        else:
+            status_badge = f'<span style="background: #c0392b; color: white; padding: 4px 8px; border-radius: 4px;" title="{r_reason}">رد شد (احتمال پایین)</span>'
         time_str = s.get('timestamp', '')[:19].replace('T', ' ')
         side_badge = f'<span style="color: {"#2ecc71" if s.get("side")=="LONG" else "#e74c3c"}; font-weight: bold;">{s.get("side")}</span>'
         
@@ -698,12 +712,26 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
         qty_eth = round(pos_usd / entry, 3)
         leverage = round(pos_usd / capital, 2)
 
-        decision_str = "تأیید ورود سازمانی (APPROVE & EXECUTE)" if is_approved else (
-            "دفع تله بیت‌کوین (BLOCKED TRAP)" if is_trap else (
-                f"عدم جذب کافی در اردربوک ({ob_scan['reason']})" if not is_absorbed else
-                "رد سیگنال (احتمال پایین ML)"
-            )
-        )
+        # تفکیک دقیق علل رد معامله برای جلوگیری از تداخل نوتیفیکیشن
+        reject_reasons = []
+        if is_trap:
+            reject_reasons.append(f"تله سرایت بیت‌کوین ({trap_reason})")
+        if not is_absorbed:
+            reject_reasons.append(ob_scan['reason'])
+        if prob < THRESHOLD:
+            reject_reasons.append(f"احتمال مدل هوش مصنوعی پایین است ({prob*100:.1f}% < {THRESHOLD*100:.0f}%)")
+
+        if is_approved:
+            decision_str = "تأیید ورود سازمانی (APPROVE & EXECUTE)"
+            primary_reject = ""
+        else:
+            primary_reject = " | ".join(reject_reasons)
+            if is_trap:
+                decision_str = "دفع تله بیت‌کوین (BLOCKED TRAP)"
+            elif not is_absorbed:
+                decision_str = "دفع خطر دیوار خرید (BLOCKED BY BID WALL)" if side == -1 else "عدم حمایت کافی در اردربوک (NO BUY DEPTH)"
+            else:
+                decision_str = "رد سیگنال (احتمال پایین ML)"
 
         border_char = "🟢" if is_approved else ("⚠️" if is_trap else "🔴")
         print("\n" + "=" * 75)
@@ -741,6 +769,7 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             print(f"  تقسیم سفارشات:            TP1: {execution_res['qty_tp1']} ETH (۵۰٪) | TP2: {execution_res['qty_tp2']} ETH (۳۰٪) | Runner: {execution_res['qty_runner']} ETH (۲۰٪)")
         else:
             print(f"  وضعیت تصمیم:               ❌ {decision_str}")
+            print(f"  علت رد:                    {primary_reject}")
         print("=" * 75 + "\n")
 
         play_alert_sound(is_approved)
@@ -760,6 +789,8 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             'ob_ratio': ob_scan['ratio'],
             'btc_vel_15m': btc_vel,
             'btc_delta_5m': btc_delta,
+            'decision': decision_str,
+            'reject_reason': primary_reject,
             'position_usd': pos_usd if is_approved else 0,
             'qty_eth': qty_eth if is_approved else 0,
             'qty_tp1': round(qty_eth * 0.50, 3) if is_approved else 0,
@@ -795,6 +826,7 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             'status': 'success',
             'decision': decision_str,
             'approved': is_approved,
+            'reject_reason': primary_reject,
             'ml_probability': round(prob, 4),
             'btc_safe': not is_trap,
             'orderbook_absorption': ob_scan,

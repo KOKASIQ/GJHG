@@ -481,7 +481,11 @@
                 } else {
                     resDiv.style.background = 'rgba(210, 153, 34, 0.2)';
                     resDiv.style.border = '1px solid #d29922';
-                    resDiv.innerHTML = '⚠️ <b>' + data.decision + '</b><br>علت رد: ' + (data.orderbook_absorption ? data.orderbook_absorption.reason : 'فیلتر هوش مصنوعی یا بیت‌کوین');
+                    const reasonText = data.reject_reason || (data.orderbook_absorption && !data.orderbook_absorption.approved ? data.orderbook_absorption.reason : 'فیلتر هوش مصنوعی یا بیت‌کوین');
+                    const obText = data.orderbook_absorption ? data.orderbook_absorption.reason : '-';
+                    resDiv.innerHTML = '⚠️ <b>' + data.decision + '</b><br>' +
+                                       '<span style="color: #f39c12; font-weight: bold;">علت رد: </span>' + reasonText + '<br>' +
+                                       '<small style="color: #8b949e;">وضعیت دفترچه سفارشات L2: ' + obText + '</small>';
                 }
                 loadChartData();
             })
