@@ -146,6 +146,81 @@ def render_dashboard():
 
     return html
 
+
+def fetch_candles_with_levels(interval='5m', limit=120):
+    candles = []
+    closes = []
+    volumes = []
+    
+    try:
+        url = f"https://fapi.binance.com/fapi/v1/klines?symbol=ETHUSDT&interval={interval}&limit={limit}"
+        res = requests.get(url, timeout=3.5).json()
+        for k in res:
+            t = int(k[0]) // 1000
+            o, h, l, c, v = float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5])
+            candles.append({'time': t, 'open': o, 'high': h, 'low': l, 'close': c})
+            closes.append(c)
+            volumes.append(v)
+    except Exception as e:
+        base_p = 2435.0
+        now_t = int(time.time())
+        step_s = 60 if interval == '1m' else (300 if interval == '5m' else 900)
+        for i in range(limit, 0, -1):
+            t = now_t - (i * step_s)
+            p = base_p + np.sin(i * 0.2) * 8.0
+            candles.append({'time': t, 'open': round(p - 1.0, 2), 'high': round(p + 2.5, 2), 'low': round(p - 2.0, 2), 'close': round(p + 0.5, 2)})
+            closes.append(p + 0.5)
+            volumes.append(100.0)
+
+    poc, vah, val = 2467.0, 2481.0, 2435.0
+    if len(closes) > 10:
+        try:
+            v_sum = sum(volumes)
+            hi_all, lo_all = max(c['high'] for c in candles), min(c['low'] for c in candles)
+            bins = np.linspace(lo_all, hi_all, 35)
+            df_c = pd.DataFrame({'close': closes, 'volume': volumes})
+            grp_bins = pd.cut(df_c['close'], bins=bins)
+            v_bins = df_c.groupby(grp_bins, observed=False)['volume'].sum()
+
+            poc_bin = v_bins.idxmax()
+            poc = float((poc_bin.left + poc_bin.right) / 2.0)
+
+            target_v = v_sum * 0.70
+            cum_v = 0
+            va_bins = []
+            for b_idx in v_bins.sort_values(ascending=False).index:
+                cum_v += v_bins[b_idx]
+                va_bins.append(b_idx)
+                if cum_v >= target_v:
+                    break
+
+            vah = float(max(b.right for b in va_bins))
+            val = float(min(b.left for b in va_bins))
+        except Exception:
+            pass
+
+    latest_signal = None
+    if os.path.exists(LOG_JSON_PATH):
+        try:
+            with open(LOG_JSON_PATH, 'r', encoding='utf-8') as f:
+                sig_list = json.load(f)
+                if sig_list:
+                    latest_signal = sig_list[-1]
+        except Exception:
+            pass
+
+    return {
+        'symbol': 'ETHUSDT',
+        'interval': interval,
+        'candles': candles,
+        'levels': {
+            'poc': round(poc, 2),
+            'vah': round(vah, 2),
+            'val': round(val, 2)
+        },
+        'latest_signal': latest_signal
+    }
+
 class HybridWebhookHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
@@ -165,8 +240,26 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.end_headers()
             self.wfile.write(json.dumps(status_data, indent=2).encode('utf-8'))
+        elif self.path.startswith('/api/candles'):
+            interval = '5m'
+            limit = 120
+            if 'interval=' in self.path:
+                try:
+                    interval = self.path.split('interval=')[1].split('&')[0]
+                except Exception:
+                    interval = '5m'
+            if 'limit=' in self.path:
+                try:
+                    limit = int(self.path.split('limit=')[1].split('&')[0])
+                except Exception:
+                    limit = 120
+            data = fetch_candles_with_levels(interval, limit)
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode('utf-8'))
         else:
-            # هر صفحه‌ای (از جمله /webhook و /) باز شد، داشبورد تحت وب نمایش داده شود
             html = render_dashboard()
             self.send_response(200)
             self.send_header('Content-Type', 'text/html; charset=utf-8')

@@ -2,84 +2,166 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>MML AI Sentinel - داشبورد زنده وب‌هوک و هوش مصنوعی</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MML AI Sentinel - چارت زنده و رادار استراتژی</title>
+    <!-- TradingView Lightweight Charts Library -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
-        body { background: #0e1117; color: #e1e8ed; margin: 0; padding: 20px; direction: rtl; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .header { background: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .header h1 { margin: 0; font-size: 22px; color: #58a6ff; display: flex; align-items: center; gap: 10px; }
+        body { background: #0c0f14; color: #e1e8ed; margin: 0; padding: 15px; direction: rtl; }
+        .container { max-width: 1300px; margin: 0 auto; }
+        .header { background: #161b22; padding: 16px 20px; border-radius: 10px; border: 1px solid #30363d; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .header h1 { margin: 0; font-size: 20px; color: #58a6ff; display: flex; align-items: center; gap: 10px; }
         .pulse { display: inline-block; width: 12px; height: 12px; background: #2ea043; border-radius: 50%; box-shadow: 0 0 10px #2ea043; animation: pulse 2s infinite; }
         @keyframes pulse { 0% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.2); } 100% { opacity: 1; transform: scale(1); } }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-bottom: 20px; }
-        .card { background: #161b22; padding: 18px; border-radius: 8px; border: 1px solid #30363d; }
-        .card .title { font-size: 13px; color: #8b949e; margin-bottom: 8px; }
-        .card .value { font-size: 22px; font-weight: bold; color: #f0f6fc; }
-        .card .sub { font-size: 12px; color: #58a6ff; margin-top: 5px; }
-        .panel { background: #161b22; padding: 20px; border-radius: 10px; border: 1px solid #30363d; margin-bottom: 20px; }
-        .btn { padding: 10px 18px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 14px; margin-left: 10px; }
+        
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 15px; }
+        .card { background: #161b22; padding: 15px; border-radius: 8px; border: 1px solid #30363d; }
+        .card .title { font-size: 12px; color: #8b949e; margin-bottom: 6px; }
+        .card .value { font-size: 20px; font-weight: bold; color: #f0f6fc; }
+        .card .sub { font-size: 11px; color: #58a6ff; margin-top: 4px; }
+        
+        /* Chart Section */
+        .chart-panel { background: #161b22; border-radius: 10px; border: 1px solid #30363d; padding: 15px; margin-bottom: 15px; position: relative; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+        .chart-title { font-size: 16px; font-weight: bold; color: #f0f6fc; display: flex; align-items: center; gap: 8px; }
+        .tf-buttons { display: flex; gap: 6px; }
+        .tf-btn { background: #21262d; border: 1px solid #30363d; color: #c9d1d9; padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: 0.2s; font-weight: bold; }
+        .tf-btn.active { background: #388bfd; color: white; border-color: #388bfd; }
+        .tf-btn:hover:not(.active) { background: #30363d; }
+        
+        #chart-wrapper { width: 100%; height: 480px; position: relative; border-radius: 6px; overflow: hidden; }
+        
+        /* Strategy Legend */
+        .legend-bar { display: flex; gap: 18px; margin-top: 10px; padding: 8px 12px; background: #0d1117; border-radius: 6px; font-size: 12px; flex-wrap: wrap; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-dot { width: 12px; height: 4px; border-radius: 2px; }
+        
+        /* Active Position Banner */
+        .pos-banner { background: rgba(35, 134, 54, 0.15); border: 1px solid #2ea043; border-radius: 8px; padding: 12px 16px; margin-bottom: 15px; display: none; align-items: center; justify-content: space-between; }
+        .pos-banner.trap { background: rgba(210, 153, 34, 0.15); border-color: #d29922; }
+        
+        .panel { background: #161b22; padding: 18px; border-radius: 10px; border: 1px solid #30363d; margin-bottom: 15px; }
+        .btn { padding: 9px 16px; border-radius: 6px; border: none; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 13px; margin-left: 8px; }
         .btn-green { background: #238636; color: white; }
         .btn-green:hover { background: #2ea043; }
         .btn-orange { background: #d29922; color: white; }
         .btn-orange:hover { background: #bb8009; }
-        table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px; }
-        th { background: #21262d; color: #8b949e; padding: 12px 10px; text-align: right; border-bottom: 2px solid #30363d; }
-        .endpoint-box { background: #0d1117; padding: 12px 16px; border-radius: 6px; border: 1px dashed #388bfd; font-family: monospace; font-size: 14px; color: #79c0ff; display: inline-block; margin-top: 10px; direction: ltr; }
-        #test-res { margin-top: 15px; padding: 15px; border-radius: 6px; display: none; }
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 13px; }
+        th { background: #21262d; color: #8b949e; padding: 10px 8px; text-align: right; border-bottom: 2px solid #30363d; }
+        td { padding: 9px 8px; border-bottom: 1px solid #2a2e39; }
+        
+        .endpoint-box { background: #0d1117; padding: 8px 12px; border-radius: 6px; border: 1px dashed #388bfd; font-family: monospace; font-size: 13px; color: #79c0ff; direction: ltr; display: inline-block; }
+        #test-res { margin-top: 12px; padding: 12px; border-radius: 6px; display: none; font-size: 13px; }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Header -->
         <div class="header">
             <div>
-                <h1><span class="pulse"></span> موتور هوش مصنوعی MML AI Sentinel</h1>
-                <div style="font-size: 13px; color: #8b949e; margin-top: 6px;">سرور وب‌هوک فعال و متصل به مدل یادگیری ماشین LightGBM</div>
+                <h1><span class="pulse"></span> رادار هوش مصنوعی MML AI Sentinel</h1>
+                <div style="font-size: 12px; color: #8b949e; margin-top: 4px;">سامانه پایش آنی حراج بازار (Auction Theory) و یادگیری ماشین</div>
             </div>
-            <div>
-                <span style="background: #238636; padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: bold;">آماده‌به‌کار (ONLINE)</span>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <span style="background: #238636; padding: 5px 12px; border-radius: 16px; font-size: 12px; font-weight: bold;">ONLINE (ابری)</span>
             </div>
         </div>
 
+        <!-- Metric KPI Cards -->
         <div class="grid">
             <div class="card">
-                <div class="title">سرمایه اولیه فعال</div>
+                <div class="title">سرمایه اولیه حساب</div>
                 <div class="value">${CAPITAL}</div>
-                <div class="sub">پوزیشن سایزینگ ۳٪ فعال</div>
+                <div class="sub">پوزیشن سایزینگ ۳٪</div>
             </div>
             <div class="card">
-                <div class="title">سقف ریسک مجاز در هر معامله</div>
+                <div class="title">سقف ریسک در هر ترید</div>
                 <div class="value">{RISK_PCT}% (${RISK_USD})</div>
-                <div class="sub">Fixed Fractional Risk</div>
+                <div class="sub">Fixed Fractional Sizing</div>
             </div>
             <div class="card">
-                <div class="title">آستانه تایید هوش مصنوعی (ML Gate)</div>
-                <div class="value">{THRESHOLD}%</div>
-                <div class="sub">LightGBM Meta-Labeling (15 ویژگی)</div>
+                <div class="title">آستانه تایید هوش مصنوعی</div>
+                <div class="value">{THRESHOLD} %</div>
+                <div class="sub">LightGBM Meta-Labeler</div>
             </div>
             <div class="card">
-                <div class="title">دیده‌بان بیت‌کوین (BTC Watchdog)</div>
-                <div class="value" style="color: #2ea043;">فعال (Active)</div>
-                <div class="sub">آستانه تله: -0.15% در ۱۵ دقیقه</div>
+                <div class="title">دیده‌بان ریزش بیت‌کوین (BTC)</div>
+                <div class="value" style="color: #2ea043;" id="btc-stat-card">فعال و ایمن</div>
+                <div class="sub" id="btc-stat-sub">آستانه فیلتر تله: -0.15%</div>
             </div>
         </div>
 
+        <!-- Active Position Live Banner -->
+        <div id="position-banner" class="pos-banner">
+            <div id="position-text" style="font-weight: bold;"></div>
+            <div id="position-details" style="font-size: 13px; color: #c9d1d9;"></div>
+        </div>
+
+        <!-- Candlestick Chart with Strategy Levels -->
+        <div class="chart-panel">
+            <div class="chart-header">
+                <div class="chart-title">
+                    <span>📊 چارت زنده کندل‌استیک اتریوم (ETHUSDT) + خطوط استراتژی</span>
+                    <span id="chart-price-badge" style="background: #21262d; color: #58a6ff; padding: 3px 8px; border-radius: 4px; font-size: 13px;">...</span>
+                </div>
+                <div class="tf-buttons">
+                    <button class="tf-btn" onclick="switchInterval('1m')">1M</button>
+                    <button class="tf-btn active" onclick="switchInterval('5m')">5M</button>
+                    <button class="tf-btn" onclick="switchInterval('15m')">15M</button>
+                    <button class="tf-btn" onclick="loadChartData()" title="به‌روزرسانی کندل‌ها">🔄 رفرش</button>
+                </div>
+            </div>
+
+            <!-- Chart Container -->
+            <div id="chart-wrapper"></div>
+
+            <!-- Strategy Legend -->
+            <div class="legend-bar">
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #f39c12;"></div>
+                    <span><b>POC:</b> نقطه کنترل حجم (<span id="poc-val">...</span>)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #e74c3c;"></div>
+                    <span><b>VAH:</b> سقف ارزش (<span id="vah-val">...</span>)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #2ecc71;"></div>
+                    <span><b>VAL:</b> کف ارزش (<span id="val-val">...</span>)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #388bfd;"></div>
+                    <span><b>Entry:</b> نقطه ورود پوزیشن</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #00e676;"></div>
+                    <span><b>TP:</b> حد سود</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-dot" style="background: #ff5252;"></div>
+                    <span><b>SL:</b> حد ضرر</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Webhook Integration & Simulator -->
         <div class="panel">
-            <h3 style="margin-top: 0; color: #f0f6fc;">آدرس وب‌هوک برای اتصال تریدینگ‌ویو (TradingView Webhook URL):</h3>
-            <div class="endpoint-box">POST http://localhost:8000/webhook</div>
-            <p style="color: #8b949e; font-size: 13px; line-height: 1.6; margin-top: 10px;">
-                این آدرس مقصد دریافت سیگنال‌های وب‌هوک تریدینگ‌ویو است. با باز کردن این صفحه در مرورگر (متد GET)، داشبورد بالا مشاهده می‌شود و با ارسال سیگنال از تریدینگ‌ویو (متد POST)، مدل بلافاصله تصمیم‌گیری می‌کند.
-            </p>
+            <h3 style="margin-top: 0; color: #f0f6fc; font-size: 15px;">🔗 آدرس وب‌هوک برای اتصال تریدینگ‌ویو:</h3>
+            <div class="endpoint-box">POST https://gjhg-c1p4.onrender.com/webhook</div>
             
-            <div style="margin-top: 20px; border-top: 1px solid #30363d; padding-top: 15px;">
-                <h4 style="margin: 0 0 10px 0; color: #f0f6fc;">شبیه‌سازی زنده ستاپ‌های معاملاتی (تست آنی):</h4>
-                <button class="btn btn-green" onclick="sendTest(1, 0.25)">🚀 تست ستاپ لانگ با تایید بیت‌کوین</button>
-                <button class="btn btn-orange" onclick="sendTest(1, -0.40)">⚠️ تست تله دامپ بیت‌کوین (دفع تله)</button>
+            <div style="margin-top: 15px; border-top: 1px solid #30363d; padding-top: 12px;">
+                <h4 style="margin: 0 0 8px 0; color: #f0f6fc; font-size: 14px;">شبیه‌سازی زنده اجرای پوزیشن و ترسیم روی چارت:</h4>
+                <button class="btn btn-green" onclick="simulateSetup(1, 0.25)">🚀 تست ورود لانگ استاندارد (با تایید بیت‌کوین)</button>
+                <button class="btn btn-orange" onclick="simulateSetup(1, -0.40)">⚠️ تست ورود با تله دامپ بیت‌کوین (دفع تله)</button>
                 <div id="test-res"></div>
             </div>
         </div>
 
+        <!-- History Table -->
         <div class="panel">
-            <h3 style="margin-top: 0; color: #f0f6fc;">تاریخچه معاملات و تصمیمات زنده هوش مصنوعی:</h3>
+            <h3 style="margin-top: 0; color: #f0f6fc; font-size: 15px;">📋 تاریخچه تصمیمات و پوزیشن‌های هوش مصنوعی:</h3>
             <div style="overflow-x: auto;">
                 <table>
                     <thead>
@@ -89,13 +171,13 @@
                             <th>قیمت ورود</th>
                             <th>حد سود (TP)</th>
                             <th>حد ضرر (SL)</th>
-                            <th>احتمال هوش مصنوعی</th>
+                            <th>احتمال مدل</th>
                             <th>شتاب بیت‌کوین</th>
-                            <th>تصمیم نهایی</th>
+                            <th>تصمیم هوش مصنوعی</th>
                             <th>سایزینگ ۳٪ (اهرم)</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="signals-tbody">
                         {SIGNALS_ROWS}
                     </tbody>
                 </table>
@@ -103,20 +185,151 @@
         </div>
     </div>
 
+    <!-- Interactive Chart Logic -->
     <script>
-        function sendTest(side, btc_vel) {
+        let currentInterval = '5m';
+        let chart = null;
+        let candleSeries = null;
+        let priceLines = [];
+
+        function initChart() {
+            const container = document.getElementById('chart-wrapper');
+            container.innerHTML = '';
+            
+            chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: 480,
+                layout: {
+                    background: { color: '#0d1117' },
+                    textColor: '#8b949e',
+                },
+                grid: {
+                    vertLines: { color: '#1e222d' },
+                    horzLines: { color: '#1e222d' },
+                },
+                timeScale: {
+                    timeVisible: true,
+                    secondsVisible: false,
+                    borderColor: '#30363d',
+                },
+                rightPriceScale: {
+                    borderColor: '#30363d',
+                },
+                crosshair: {
+                    mode: LightweightCharts.CrosshairMode.Normal,
+                },
+            });
+
+            candleSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+
+            window.addEventListener('resize', () => {
+                if (chart && container) {
+                    chart.resize(container.clientWidth, 480);
+                }
+            });
+        }
+
+        function clearPriceLines() {
+            priceLines.forEach(line => {
+                try { candleSeries.removePriceLine(line); } catch (e) {}
+            });
+            priceLines = [];
+        }
+
+        function addLine(price, color, title, lineStyle = LightweightCharts.LineStyle.Solid, width = 2) {
+            if (!price || isNaN(price)) return;
+            const pl = candleSeries.createPriceLine({
+                price: price,
+                color: color,
+                lineWidth: width,
+                lineStyle: lineStyle,
+                axisLabelVisible: true,
+                title: title,
+            });
+            priceLines.push(pl);
+        }
+
+        function loadChartData() {
+            fetch('/api/candles?interval=' + currentInterval + '&limit=120')
+                .then(r => r.json())
+                .then(data => {
+                    if (!data.candles || data.candles.length === 0) return;
+                    
+                    // Render Candles
+                    candleSeries.setData(data.candles);
+
+                    // Update Badge Price
+                    const lastCandle = data.candles[data.candles.length - 1];
+                    document.getElementById('chart-price-badge').innerText = '$' + lastCandle.close.toLocaleString();
+
+                    // Clear and Draw Strategy Lines
+                    clearPriceLines();
+
+                    const lv = data.levels || {};
+                    if (lv.poc) {
+                        addLine(lv.poc, '#f39c12', 'POC نقطه کنترل حجم', LightweightCharts.LineStyle.Solid, 2);
+                        document.getElementById('poc-val').innerText = '$' + lv.poc.toFixed(1);
+                    }
+                    if (lv.vah) {
+                        addLine(lv.vah, '#e74c3c', 'VAH سقف ارزش', LightweightCharts.LineStyle.Dashed, 2);
+                        document.getElementById('vah-val').innerText = '$' + lv.vah.toFixed(1);
+                    }
+                    if (lv.val) {
+                        addLine(lv.val, '#2ecc71', 'VAL کف ارزش', LightweightCharts.LineStyle.Dashed, 2);
+                        document.getElementById('val-val').innerText = '$' + lv.val.toFixed(1);
+                    }
+
+                    // Draw Active Position if present
+                    if (data.latest_signal && data.latest_signal.approved) {
+                        const s = data.latest_signal;
+                        addLine(s.entry, '#388bfd', 'ورود پوزیشن (' + s.side + ')', LightweightCharts.LineStyle.Solid, 2);
+                        addLine(s.tp, '#00e676', 'حد سود TP', LightweightCharts.LineStyle.Dotted, 2);
+                        addLine(s.sl, '#ff5252', 'حد ضرر SL', LightweightCharts.LineStyle.Dotted, 2);
+
+                        // Show Banner
+                        const banner = document.getElementById('position-banner');
+                        banner.style.display = 'flex';
+                        banner.className = 'pos-banner';
+                        document.getElementById('position-text').innerHTML = '🟢 پوزیشن فعال هوش مصنوعی: ' + s.side + ' در قیمت $' + s.entry;
+                        document.getElementById('position-details').innerHTML = 'تارگت سود: $' + s.tp + ' | حد ضرر: $' + s.sl + ' | حجم پوزیشن: $' + s.position_usd.toLocaleString() + ' (' + s.leverage.toFixed(1) + 'x اهرم)';
+                    }
+                })
+                .catch(e => console.error("Error loading candles:", e));
+        }
+
+        function switchInterval(tf) {
+            currentInterval = tf;
+            document.querySelectorAll('.tf-btn').forEach(b => {
+                b.classList.remove('active');
+                if (b.innerText.toLowerCase() === tf.toLowerCase()) b.classList.add('active');
+            });
+            loadChartData();
+        }
+
+        function simulateSetup(side, btc_vel) {
             const resDiv = document.getElementById('test-res');
             resDiv.style.display = 'block';
             resDiv.style.background = '#21262d';
             resDiv.style.color = '#fff';
-            resDiv.innerHTML = 'در حال ارسال به موتور هوش مصنوعی و پردازش مدل...';
+            resDiv.innerHTML = 'در حال ارسال ستاپ به موتور هوش مصنوعی و ترسیم روی چارت...';
+
+            // Get current price from badge
+            let currentP = 2435.0;
+            const badgeTxt = document.getElementById('chart-price-badge').innerText.replace('$', '').replace(/,/g, '');
+            if (!isNaN(parseFloat(badgeTxt))) currentP = parseFloat(badgeTxt);
 
             const payload = {
                 symbol: "ETHUSDT",
                 side: side,
-                entry: 2435.0,
-                tp: 2467.0,
-                sl: 2413.67,
+                entry: currentP,
+                tp: currentP * 1.015,
+                sl: currentP * 0.990,
                 capital: 1000.0,
                 risk_pct: 3.0,
                 btc_vel_15m: btc_vel,
@@ -138,19 +351,28 @@
                 if (data.approved) {
                     resDiv.style.background = 'rgba(35, 134, 54, 0.2)';
                     resDiv.style.border = '1px solid #2ea043';
-                    resDiv.innerHTML = '<b>نتیجه:</b> ' + data.decision + ' | احتمال: ' + (data.ml_probability*100).toFixed(1) + '% | حجم پوزیشن: $' + data.position_sizing.position_usd + ' (' + data.position_sizing.recommended_leverage + 'x)<br><small>برای مشاهده ردیف جدید در جدول، صفحه را رفرش کنید.</small>';
+                    resDiv.innerHTML = '✅ <b>' + data.decision + '</b> | احتمال: ' + (data.ml_probability*100).toFixed(1) + '% | حجم مجاز: $' + data.position_sizing.position_usd + ' (' + data.position_sizing.recommended_leverage + 'x)<br>خطوط Entry, TP و SL بلافاصله روی چارت بالا رسم شدند!';
                 } else {
                     resDiv.style.background = 'rgba(210, 153, 34, 0.2)';
                     resDiv.style.border = '1px solid #d29922';
-                    resDiv.innerHTML = '<b>نتیجه:</b> ' + data.decision + ' | احتمال: ' + (data.ml_probability*100).toFixed(1) + '% | وضعیت بیت‌کوین: تله ریزش شناسایی و ورود مسدود شد!<br><small>برای مشاهده ردیف جدید در جدول، صفحه را رفرش کنید.</small>';
+                    resDiv.innerHTML = '⚠️ <b>' + data.decision + '</b> | شتاب بیت‌کوین: ' + btc_vel + '% | ورود مسدود شد و پوزیشنی باز نشد.';
                 }
+                loadChartData();
             })
             .catch(err => {
                 resDiv.style.background = 'rgba(218, 54, 51, 0.2)';
                 resDiv.style.border = '1px solid #da3633';
-                resDiv.innerHTML = 'خطا در ارتباط با سرور: ' + err;
+                resDiv.innerHTML = 'خطا: ' + err;
             });
         }
+
+        // Initialize on load
+        document.addEventListener('DOMContentLoaded', () => {
+            initChart();
+            loadChartData();
+            // Auto refresh candles every 12 seconds
+            setInterval(loadChartData, 12000);
+        });
     </script>
 </body>
 </html>
