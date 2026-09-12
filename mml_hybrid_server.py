@@ -15,6 +15,7 @@ import pandas as pd
 import numpy as np
 import joblib
 import requests
+import threading
 
 try:
     import winsound
@@ -335,7 +336,29 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             }
         }
 
+def start_keep_alive_thread():
+    def pinger():
+        time.sleep(30)
+        while True:
+            url = os.environ.get('RENDER_EXTERNAL_URL')
+            if not url:
+                host = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
+                if host:
+                    url = f"https://{host}"
+            if url:
+                try:
+                    res = requests.get(f"{url}/status", timeout=10)
+                    print(f"[*] پالس بیدارباش (Keep-Alive) ارسال شد به {url}/status (کد: {res.status_code})")
+                except Exception as e:
+                    pass
+            time.sleep(600)
+
+    t = threading.Thread(target=pinger, daemon=True)
+    t.start()
+    print("[*] موتور بیدارباش خودکار (Self-Keep-Alive Engine) فعال شد.")
+
 def run_server(port=8000):
+    start_keep_alive_thread()
     server_address = ('', port)
     httpd = HTTPServer(server_address, HybridWebhookHandler)
     print(f"🚀 سرور وب‌هوک و داشبورد زنده روی پورت {port} فعال شد.")
