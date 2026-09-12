@@ -95,10 +95,12 @@ array.push(day_volumes, volume)
 array.push(day_prices, (high + low + close) / 3.0)
 
 // مقداردهی اولیه برای بار اول در چارت
+// استخراج دیتای روزانه در اسکوپ سراسری (Global Scope)
+prev_d_h = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
+prev_d_l = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
+prev_d_c = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
+
 if na(prev_real_poc)
-    prev_d_h = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
-    prev_d_l = request.security(syminfo.tickerid, "D", low[1], lookahead=barmerge.lookahead_on)
-    prev_d_c = request.security(syminfo.tickerid, "D", close[1], lookahead=barmerge.lookahead_on)
     prev_real_poc := (prev_d_h + prev_d_l + prev_d_c) / 3.0
     prev_real_vah := math.min(prev_d_h, prev_real_poc + (prev_d_h - prev_d_l) * 0.35)
     prev_real_val := math.max(prev_d_l, prev_real_poc - (prev_d_h - prev_d_l) * 0.35)
