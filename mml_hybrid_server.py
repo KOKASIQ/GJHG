@@ -610,6 +610,10 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
         self.wfile.write(json.dumps(result, indent=2, ensure_ascii=False).encode('utf-8'))
 
     def process_webhook_payload(self, p):
+        if 'warning' in p:
+            print(f"[!] هشدار تله بیت‌کوین دریافت شد: {p['warning']}")
+            return {'status': 'TRAP_WARNING_LOGGED', 'warning': p['warning']}
+
         # دریافت سطوح روزانه
         levels = compute_real_volume_profile('ETHUSDT')
         poc = levels['poc']

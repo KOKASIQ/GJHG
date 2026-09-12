@@ -86,8 +86,9 @@ else
     cur_d_high := math.max(cur_d_high, high)
     cur_d_low := math.min(cur_d_low, low)
 
-array.push(day_volumes, volume)
-array.push(day_prices, (high + low + close) / 3.0)
+if barstate.isconfirmed
+    array.push(day_volumes, volume)
+    array.push(day_prices, (high + low + close) / 3.0)
 
 // استخراج دیتای روزانه در اسکوپ سراسری برای شروع ایمن
 prev_d_h = request.security(syminfo.tickerid, "D", high[1], lookahead=barmerge.lookahead_on)
@@ -206,7 +207,10 @@ calc_pos_sizing(entry_p, sl_p) =>
 var int last_trade_bar = 0
 min_bars_between = 20
 
-if (long_approved and (bar_index - last_trade_bar > min_bars_between))
+long_trigger  = long_approved and (bar_index - last_trade_bar > min_bars_between)
+short_trigger = short_approved and (bar_index - last_trade_bar > min_bars_between)
+
+if long_trigger
     last_trade_bar := bar_index
     label_text = "🟢 ورود لانگ حراج (AMT LONG)" +
                  "\nقیمت ورود: " + str.tostring(long_entry, "#.##") +
@@ -223,7 +227,7 @@ if (long_approved and (bar_index - last_trade_bar > min_bars_between))
     line.new(bar_index, long_tp2, bar_index + 30, long_tp2, color=color.teal, width=2, style=line.style_dashed)
     line.new(bar_index, long_sl, bar_index + 30, long_sl, color=color.red, width=2, style=line.style_dashed)
 
-if (short_approved and (bar_index - last_trade_bar > min_bars_between))
+if short_trigger
     last_trade_bar := bar_index
     label_text = "🔴 ورود شورت حراج (AMT SHORT)" +
                  "\nقیمت ورود: " + str.tostring(short_entry, "#.##") +
@@ -284,6 +288,46 @@ if barstate.islast and show_hud
 // ==============================================================================
 // 10. ارسال وب‌هوک به سرور پایتون برای اعتبارسنجی نهایی و اجرای سفارشات
 // ==============================================================================
+// ارسال داینامیک مقادیر دقیق ساختاری با تابع بومی alert()
+if long_trigger
+    string msg_long = '{"symbol":"ETHUSDT"' +
+                      ',"side":1' +
+                      ',"entry":' + str.tostring(long_entry, "#.##") +
+                      ',"sl":' + str.tostring(long_sl, "#.##") +
+                      ',"tp1":' + str.tostring(long_tp1, "#.##") +
+                      ',"tp2":' + str.tostring(long_tp2, "#.##") +
+                      ',"risk_pct":' + str.tostring(risk_pct, "#.#") +
+                      ',"capital":' + str.tostring(account_cap, "#") +
+                      ',"btc_vel_15m":' + str.tostring(btc_vel_15m, "#.##") +
+                      ',"btc_delta_5m":' + str.tostring(btc_delta_5m, "#.####") +
+                      ',"delta_pct_5m":' + str.tostring(eth_delta_5m, "#.####") +
+                      ',"atr_pct":' + str.tostring((eth_atr / close) * 100.0, "#.##") +
+                      '}'
+    alert(msg_long, alert.freq_once_per_bar_close)
+
+if short_trigger
+    string msg_short = '{"symbol":"ETHUSDT"' +
+                       ',"side":-1' +
+                       ',"entry":' + str.tostring(short_entry, "#.##") +
+                       ',"sl":' + str.tostring(short_sl, "#.##") +
+                       ',"tp1":' + str.tostring(short_tp1, "#.##") +
+                       ',"tp2":' + str.tostring(short_tp2, "#.##") +
+                       ',"risk_pct":' + str.tostring(risk_pct, "#.#") +
+                       ',"capital":' + str.tostring(account_cap, "#") +
+                       ',"btc_vel_15m":' + str.tostring(btc_vel_15m, "#.##") +
+                       ',"btc_delta_5m":' + str.tostring(btc_delta_5m, "#.####") +
+                       ',"delta_pct_5m":' + str.tostring(eth_delta_5m, "#.####") +
+                       ',"atr_pct":' + str.tostring((eth_atr / close) * 100.0, "#.##") +
+                       '}'
+    alert(msg_short, alert.freq_once_per_bar_close)
+
+var int last_trap_alert_bar = 0
+if (long_trap_detected or short_trap_detected) and (bar_index - last_trap_alert_bar > 15)
+    last_trap_alert_bar := bar_index
+    string trap_json = '{"symbol":"ETHUSDT","warning":"BTC Contagion Trap Detected","side":' + (long_trap_detected ? "1" : "-1") + '}'
+    alert(trap_json, alert.freq_once_per_bar_close)
+
+// آلرت‌های استاتیک کمکی (Auxiliary Alertconditions)
 alertcondition(long_approved, title="سیگنال لانگ حراج اتریوم (تایید هوش مصنوعی)", message='{"symbol":"ETHUSDT","side":1}')
 alertcondition(short_approved, title="سیگنال شورت حراج اتریوم (تایید هوش مصنوعی)", message='{"symbol":"ETHUSDT","side":-1}')
 alertcondition(long_trap_detected or short_trap_detected, title="هشدار تله سرایت بیت‌کوین", message='{"warning":"BTC Contagion Trap Detected"}')
