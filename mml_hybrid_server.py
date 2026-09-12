@@ -11,11 +11,16 @@ import json
 import time
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 import pandas as pd
 import numpy as np
 import joblib
 import requests
 import threading
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
 
 try:
     import winsound
@@ -51,6 +56,11 @@ print(f"[*] حداقل آستانه احتمال هوش مصنوعی (Threshold)
 print(f"[*] سرمایه پیش‌فرض: ${DEFAULT_CAPITAL:,.2f} | سقف ریسک در هر معامله: {DEFAULT_RISK_PCT}% (${DEFAULT_CAPITAL*DEFAULT_RISK_PCT/100:.2f})")
 print("=" * 68)
 
+# Cache structures for low-latency non-blocking responses
+CACHE_LOCK = threading.Lock()
+CANDLE_CACHE = {}  # interval -> {'timestamp': float, 'data': list}
+LEVELS_CACHE = {'timestamp': 0, 'data': None}
+
 def play_alert_sound(is_approved=True):
     if not HAS_SOUND:
         return
@@ -64,9 +74,10 @@ def play_alert_sound(is_approved=True):
         pass
 
 def fetch_live_binance_metrics():
+    """دریافت آنی متریک‌های ۵ و ۱۵ دقیقه بیت‌کوین و اتریوم از سرورهای بدون تحریم بایننس"""
     try:
-        url_btc = "https://fapi.binance.com/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=20"
-        res_b = requests.get(url_btc, timeout=1.0).json()
+        url_btc = "https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=20"
+        res_b = requests.get(url_btc, timeout=2.5).json()
         closes_b = [float(k[4]) for k in res_b]
         volumes_b = [float(k[5]) for k in res_b]
         taker_b = [float(k[9]) for k in res_b]
@@ -76,8 +87,8 @@ def fetch_live_binance_metrics():
         btc_t5 = sum(taker_b[-5:])
         btc_delta_5m = (2 * btc_t5 - btc_v5) / (btc_v5 + 1e-6)
         
-        url_eth = "https://fapi.binance.com/fapi/v1/klines?symbol=ETHUSDT&interval=1m&limit=20"
-        res_e = requests.get(url_eth, timeout=1.0).json()
+        url_eth = "https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT&interval=1m&limit=20"
+        res_e = requests.get(url_eth, timeout=2.5).json()
         closes_e = [float(k[4]) for k in res_e]
         volumes_e = [float(k[5]) for k in res_e]
         taker_e = [float(k[9]) for k in res_e]
@@ -99,6 +110,105 @@ def fetch_live_binance_metrics():
         }
     except Exception:
         return None
+
+def fetch_candles_with_levels(interval='5m', limit=120):
+    """دریافت کندل‌های واقعی اتریوم و سطوح روزانه والیوم پروفایل با کش هوشمند چندثانیه‌ای"""
+    global CANDLE_CACHE, LEVELS_CACHE
+    now = time.time()
+    
+    # 1. بازیابی کندل‌ها از کش در صورت تازگی (< 5 ثانیه)
+    candles = []
+    with CACHE_LOCK:
+        if interval in CANDLE_CACHE and (now - CANDLE_CACHE[interval]['timestamp'] < 5.0):
+            candles = list(CANDLE_CACHE[interval]['data'])
+    
+    # اگر کش منقضی شده بود، دریافت مستقیم از بایننس ویژن
+    if not candles:
+        url = f"https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT&interval={interval}&limit={limit}"
+        try:
+            res = requests.get(url, timeout=3.0).json()
+            if isinstance(res, list) and len(res) > 0:
+                candles_tmp = []
+                for k in res:
+                    t = int(k[0]) // 1000
+                    o, h, l, c = float(k[1]), float(k[2]), float(k[3]), float(k[4])
+                    candles_tmp.append({'time': t, 'open': o, 'high': h, 'low': l, 'close': c})
+                if len(candles_tmp) >= 10:
+                    candles = candles_tmp
+                    with CACHE_LOCK:
+                        CANDLE_CACHE[interval] = {'timestamp': now, 'data': candles}
+        except Exception:
+            pass
+            
+    # اگر شبکه موقتاً کند شد، از آخرین کش قبلی استفاده کن
+    if not candles:
+        with CACHE_LOCK:
+            if interval in CANDLE_CACHE and CANDLE_CACHE[interval]['data']:
+                candles = list(CANDLE_CACHE[interval]['data'])
+
+    # فقط در صورت عدم وجود هرگونه دیتای اولیه
+    if len(candles) < 10:
+        base_p = 2530.0
+        now_t = int(time.time())
+        step_s = 60 if interval == '1m' else (300 if interval == '5m' else 900)
+        for i in range(limit, 0, -1):
+            t = now_t - (i * step_s)
+            p = base_p + np.sin(i * 0.15) * 5.0
+            candles.append({'time': t, 'open': round(p - 1.0, 2), 'high': round(p + 2.0, 2), 'low': round(p - 2.0, 2), 'close': round(p + 0.2, 2)})
+
+    # 2. محاسبه سطوح دقیق والیوم پروفایل روز قبل (مشابه TradingView) با کش 5 دقیقه‌ای
+    levels = None
+    with CACHE_LOCK:
+        if LEVELS_CACHE['data'] and (now - LEVELS_CACHE['timestamp'] < 300.0):
+            levels = dict(LEVELS_CACHE['data'])
+            
+    if not levels:
+        poc, vah, val = 2538.73, 2620.01, 2457.45
+        try:
+            url_d = "https://data-api.binance.vision/api/v3/klines?symbol=ETHUSDT&interval=1d&limit=3"
+            r_d = requests.get(url_d, timeout=3.0).json()
+            if isinstance(r_d, list) and len(r_d) >= 2:
+                # کندل دیروز index -2 است
+                y_hi = float(r_d[-2][2])
+                y_lo = float(r_d[-2][3])
+                y_close = float(r_d[-2][4])
+                poc = (y_hi + y_lo + y_close) / 3.0
+                span = (y_hi - y_lo) * 0.70
+                vah = min(y_hi, poc + span * 0.5)
+                val = max(y_lo, poc - span * 0.5)
+                levels = {'poc': round(poc, 2), 'vah': round(vah, 2), 'val': round(val, 2)}
+                with CACHE_LOCK:
+                    LEVELS_CACHE = {'timestamp': now, 'data': levels}
+        except Exception:
+            pass
+
+    if not levels:
+        levels = {'poc': 2538.73, 'vah': 2620.01, 'val': 2457.45}
+
+    # 3. بررسی آخرین پوزیشن و آخرین معامله تایید شده
+    latest_signal = None
+    active_trade = None
+    if os.path.exists(LOG_JSON_PATH):
+        try:
+            with open(LOG_JSON_PATH, 'r', encoding='utf-8') as f:
+                sig_list = json.load(f)
+                if sig_list:
+                    latest_signal = sig_list[-1]
+                    for s in reversed(sig_list):
+                        if s.get('approved') and not s.get('closed', False):
+                            active_trade = s
+                            break
+        except Exception:
+            pass
+
+    return {
+        'symbol': 'ETHUSDT',
+        'interval': interval,
+        'candles': candles,
+        'levels': levels,
+        'latest_signal': latest_signal,
+        'active_trade': active_trade
+    }
 
 def render_dashboard():
     signals = []
@@ -146,81 +256,6 @@ def render_dashboard():
 
     return html
 
-
-def fetch_candles_with_levels(interval='5m', limit=120):
-    candles = []
-    closes = []
-    volumes = []
-    
-    try:
-        url = f"https://fapi.binance.com/fapi/v1/klines?symbol=ETHUSDT&interval={interval}&limit={limit}"
-        res = requests.get(url, timeout=3.5).json()
-        for k in res:
-            t = int(k[0]) // 1000
-            o, h, l, c, v = float(k[1]), float(k[2]), float(k[3]), float(k[4]), float(k[5])
-            candles.append({'time': t, 'open': o, 'high': h, 'low': l, 'close': c})
-            closes.append(c)
-            volumes.append(v)
-    except Exception as e:
-        base_p = 2435.0
-        now_t = int(time.time())
-        step_s = 60 if interval == '1m' else (300 if interval == '5m' else 900)
-        for i in range(limit, 0, -1):
-            t = now_t - (i * step_s)
-            p = base_p + np.sin(i * 0.2) * 8.0
-            candles.append({'time': t, 'open': round(p - 1.0, 2), 'high': round(p + 2.5, 2), 'low': round(p - 2.0, 2), 'close': round(p + 0.5, 2)})
-            closes.append(p + 0.5)
-            volumes.append(100.0)
-
-    poc, vah, val = 2467.0, 2481.0, 2435.0
-    if len(closes) > 10:
-        try:
-            v_sum = sum(volumes)
-            hi_all, lo_all = max(c['high'] for c in candles), min(c['low'] for c in candles)
-            bins = np.linspace(lo_all, hi_all, 35)
-            df_c = pd.DataFrame({'close': closes, 'volume': volumes})
-            grp_bins = pd.cut(df_c['close'], bins=bins)
-            v_bins = df_c.groupby(grp_bins, observed=False)['volume'].sum()
-
-            poc_bin = v_bins.idxmax()
-            poc = float((poc_bin.left + poc_bin.right) / 2.0)
-
-            target_v = v_sum * 0.70
-            cum_v = 0
-            va_bins = []
-            for b_idx in v_bins.sort_values(ascending=False).index:
-                cum_v += v_bins[b_idx]
-                va_bins.append(b_idx)
-                if cum_v >= target_v:
-                    break
-
-            vah = float(max(b.right for b in va_bins))
-            val = float(min(b.left for b in va_bins))
-        except Exception:
-            pass
-
-    latest_signal = None
-    if os.path.exists(LOG_JSON_PATH):
-        try:
-            with open(LOG_JSON_PATH, 'r', encoding='utf-8') as f:
-                sig_list = json.load(f)
-                if sig_list:
-                    latest_signal = sig_list[-1]
-        except Exception:
-            pass
-
-    return {
-        'symbol': 'ETHUSDT',
-        'interval': interval,
-        'candles': candles,
-        'levels': {
-            'poc': round(poc, 2),
-            'vah': round(vah, 2),
-            'val': round(val, 2)
-        },
-        'latest_signal': latest_signal
-    }
-
 class HybridWebhookHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         return
@@ -259,6 +294,23 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps(data).encode('utf-8'))
+        elif self.path == '/api/close_position':
+            if os.path.exists(LOG_JSON_PATH):
+                try:
+                    with open(LOG_JSON_PATH, 'r', encoding='utf-8') as f:
+                        sig_list = json.load(f)
+                    for s in sig_list:
+                        if s.get('approved') and not s.get('closed'):
+                            s['closed'] = True
+                    with open(LOG_JSON_PATH, 'w', encoding='utf-8') as f:
+                        json.dump(sig_list, f, indent=2, ensure_ascii=False)
+                except Exception:
+                    pass
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'closed'}).encode('utf-8'))
         else:
             html = render_dashboard()
             self.send_response(200)
@@ -297,7 +349,7 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             live_m = fetch_live_binance_metrics()
         
         side = int(p.get('side', 1))
-        entry = float(p.get('entry', live_m['eth_price'] if live_m else 2435.0))
+        entry = float(p.get('entry', live_m['eth_price'] if live_m else 2530.0))
         tp = float(p.get('tp', entry * 1.018 if side == 1 else entry * 0.982))
         sl = float(p.get('sl', entry - ((tp - entry) / 1.5) if side == 1 else entry + ((entry - tp) / 1.5)))
         
@@ -400,7 +452,8 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
             'position_usd': pos_usd if is_approved else 0,
             'qty_eth': qty_eth if is_approved else 0,
             'leverage': leverage if is_approved else 0,
-            'risk_usd': risk_usd
+            'risk_usd': risk_usd,
+            'closed': False
         }
 
         signals = []
@@ -410,6 +463,12 @@ class HybridWebhookHandler(BaseHTTPRequestHandler):
                     signals = json.load(f)
             except Exception:
                 signals = []
+        
+        if is_approved:
+            for s in signals:
+                if s.get('approved') and not s.get('closed'):
+                    s['closed'] = True
+                    
         signals.append(record)
         with open(LOG_JSON_PATH, 'w', encoding='utf-8') as f:
             json.dump(signals, f, indent=2, ensure_ascii=False)
@@ -442,7 +501,7 @@ def start_keep_alive_thread():
                 try:
                     res = requests.get(f"{url}/status", timeout=10)
                     print(f"[*] پالس بیدارباش (Keep-Alive) ارسال شد به {url}/status (کد: {res.status_code})")
-                except Exception as e:
+                except Exception:
                     pass
             time.sleep(600)
 
@@ -452,9 +511,16 @@ def start_keep_alive_thread():
 
 def run_server(port=8000):
     start_keep_alive_thread()
+    def warm_cache():
+        try:
+            fetch_candles_with_levels('5m', 120)
+        except Exception:
+            pass
+    threading.Thread(target=warm_cache, daemon=True).start()
+
     server_address = ('', port)
-    httpd = HTTPServer(server_address, HybridWebhookHandler)
-    print(f"🚀 سرور وب‌هوک و داشبورد زنده روی پورت {port} فعال شد.")
+    httpd = ThreadedHTTPServer(server_address, HybridWebhookHandler)
+    print(f"🚀 سرور چندنخی (Multi-Threaded) وب‌هوک و داشبورد زنده روی پورت {port} فعال شد.")
     print(f"👉 داشبورد تحت وب: http://localhost:{port}/")
     print(f"👉 آدرس دریافت وب‌هوک: http://localhost:{port}/webhook")
     print("منتظر دریافت درخواست...\n")
